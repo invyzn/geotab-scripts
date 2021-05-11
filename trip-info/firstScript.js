@@ -1,16 +1,16 @@
 
-const oneMonthAgo = () =>{
+const oneMonthAgo = () => {
     var d = (new Date());
-    d.setMonth(d.getMonth()-1);
-     return (d.toISOString());
-    
+    d.setMonth(d.getMonth() - 1);
+    return (d.toISOString());
+
 }
-const convertArrayToObject = (array, key) =>{
+const convertArrayToObject = (array, key) => {
     const initialValue = {};
     return array.reduce((obj, item) => {
         return {
-        ...obj,
-        [item[key]]: item,
+            ...obj,
+            [item[key]]: item,
         };
     }, initialValue);
 };
@@ -22,23 +22,23 @@ const call = (method, params) => {
     })
 }
 
-const multiCall  = (calls) => {
+const multiCall = (calls) => {
     return new Promise((resolve, reject) => {
         api.call("ExecuteMultiCall", {
-            calls : calls
+            calls: calls
         }, resolve);
-    }) 
+    })
 }
 
-const getDrivers =  async () => {
-    const drivers = await call("Get",{
+const getDrivers = async () => {
+    const drivers = await call("Get", {
         "typeName": "User",
         "resultsLimit": 10,
         "search": {
             "isDriver": true
-         }
+        }
     });
-    return convertArrayToObject(drivers,"id");
+    return convertArrayToObject(drivers, "id");
 }
 
 const getDriversTrips = async (drivers) => {
@@ -49,12 +49,12 @@ const getDriversTrips = async (drivers) => {
             "typeName": "Trip",
             "resultsLimit": 10,
             "search": {
-                "userSearch":{
+                "userSearch": {
                     "id": driver.id
                 },
                 "toDate": now,
                 "fromDate": oneMonthAgo(),
-                "includeOverlappedTrips":true 
+                "includeOverlappedTrips": true
             }
         }
     }));
@@ -62,88 +62,111 @@ const getDriversTrips = async (drivers) => {
 };
 
 
-const getAddresses = async (trips)  =>{
+const getAddresses = async (trips) => {
     const addressCalls = trips.map(driverTrip => ({
-        "method" : "GetAddresses",
-        "params" : {
-            "coordinates": driverTrip.map((trip) => ({"x": trip.stopPoint.x, "y": trip.stopPoint.y})),
-            "movingAddresses":false,
+        "method": "GetAddresses",
+        "params": {
+            "coordinates": driverTrip.map((trip) => ({
+                "x": trip.stopPoint.x,
+                "y": trip.stopPoint.y
+            })),
+            "movingAddresses": false,
         }
     }))
-    
+
     return await multiCall(addressCalls);
 }
 
-const getDevices = async (trips) => {
-     const deviceIds = [];
-     let device= trips.flat().map((trip) =>trip.device.id);
-     deviceIds.push(device);
-     const deviceCalls = trips.map(driverTrip => ({
-         "method": "Get",
-         "params": {
-             "typeName": "Device",
-             "search": {"id": deviceIds.map[device]}
-         }
-     }))
-     return await multiCall(deviceCalls);
+const getTripDevices = async (trips) => {
+    const deviceIds = [];
+    let device = trips.flat().map((trip) => trip.device.id);
+    deviceIds.push(device);
+    const deviceCalls = trips.map(driverTrip => ({
+        "method": "Get",
+        "params": {
+            "typeName": "Device",
+            "search": {
+                "id": deviceIds.map[device]
+            }
+        }
+    }))
+    return await multiCall(deviceCalls);
 }
 
+const driverNamefromId = (drivers, id) => {
+    return drivers[id] ? `${drivers[id].firstName} ${drivers[id].lastName}` : 'No driver'
+};
+
+const deviceNamefromId = (devices, id) => {
+    for (let i = 0; i < devices.length; i++) {
+        let ids = (devices[i].map(item => (item.id)));
+        let names = (devices[i].map(item => (item.name)));
+        for (let i = 0; i < ids.length; i++) {
+            if (id === ids[i]) {
+                return (names[i]);
+            }
+        }
+        return 'device name not found';
+    }
+};
+
+const formatTripDetails = (trips, drivers, devices, addresses) => {
+    const details = [];
+    trips.forEach((trip, index) => {
+        let driverId = '';
+        let deviceId = '';
+        let formattedAddresses = [];
+        let speed = 0;
+        let distance = 0;
+        let durations = [];
+        
+        trip.forEach((stop, stopIndex) => {
+            let address = `(${addresses[index][stopIndex].formattedAddress})`;
+            driverId = stop.driver.id;
+            deviceId = stop.device.id;
+            formattedAddresses.push(address);
+            speed += stop.averageSpeed;
+            distance += stop.distance;
+            let startDate = new Date(stop.start)
+            let stopDate = new Date(stop.stop)
+            //time is wrong but work on it later
+            let duration = new Date(((stopDate - startDate) / 1000 / 60) * 1000).toISOString().substr(11, 11)
+            durations.push(duration);
+        })
+
+        speed /= trip.length;
+        details.push({
+            driverId: driverId,
+            deviceId: deviceId,
+            deviceName: deviceNamefromId(devices, deviceId),
+            speed: speed,
+            distance: distance,
+            duration: durations.join(','),
+            address: formattedAddresses.join(''),
+            driverName: driverNamefromId(drivers, driverId)
+        })
+
+    });
+    return details
+}
+
+const outputTripDetails = (tripDetails) => {
+    tripDetails.forEach((details) => {
+        console.log(details.driverName,
+            `DriverId: ${details.driverId}`, `DeviceId: ${details.deviceId}`,
+            `Device Name: ${details.deviceName}`, details.address,
+            `${details.speed} km/h`, `${details.distance} km`, details.duration)
+    })
+
+}
 
 const main = (async () => {
     const drivers = await getDrivers();
     const driversArray = Object.values(drivers);
     const trips = await getDriversTrips(driversArray);
     const addresses = await getAddresses(trips)
-    const devices = await getDevices(trips)
-    const driverNamefromId = (id) => {
-        //something to return driver name from id
-      return drivers[id] ? `${drivers[id].firstName} ${drivers[id].lastName}`: 'No driver'
-    };
-    const deviceNamefromId = (id) => {
-    //something to return device name from device id
-        for(let i = 0; i<devices.length; i++){
-          let ids  = (devices[i].map(item => ( item.id)));
-          let names = (devices[i].map(item => ( item.name)));
-              for(let i =0; i< ids.length; i ++){
-                     if(id === ids[i]){
-                         return(names[i]);
-                     }
-                  }
-                  return 'device name not found';
-                }
-          };
-    //output trip information
-      trips.forEach((trip,index)=> {
-        let driverId = ''  ;
-        let deviceId = '';
-        let formattedAddresses = []  ;
-        let speed = 0;
-        let distance = 0;
-        let durations = [];
-        
-        trip.forEach((stop,stopIndex)=>{
-            let address = `(${addresses[index][stopIndex].formattedAddress})`;
-            driverId = stop.driver.id;
-            deviceId = stop.device.id;
-            formattedAddresses.push(address);
-            speed += stop.averageSpeed;
-            distance +=stop.distance;
-            let startDate =new Date(stop.start)
-            let stopDate = new Date(stop.stop)
-            //time is wrong but work on it later
-            let duration =new Date(((stopDate -startDate)/1000/60)*1000).toISOString().substr(11,11)
-            durations.push(duration);
-        })
-        
-        speed/=trip.length;
-        console.log(driverNamefromId(driverId), 
-        `DriverId: ${driverId}`,`DeviceId: ${deviceId}`,
-        `Device Name: ${deviceNamefromId(deviceId)}`, formattedAddresses.join(''), 
-        `${speed} km/h`, `${distance} km`, durations.join(','));
-        
-    });
+    const devices = await getTripDevices(trips)
+    const tripDetails = formatTripDetails(trips, drivers, devices, addresses);
     
-  
-    
-  
+    outputTripDetails(tripDetails);
 })();
