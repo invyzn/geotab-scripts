@@ -14,4 +14,4 @@ Address of the stop point
 
 total distance traveled
 
-Device Nam
+Device Name

@@ -1,4 +1,3 @@
-
 const oneMonthAgo = () => {
     var d = (new Date());
     d.setMonth(d.getMonth() - 1);
@@ -118,7 +117,7 @@ const formatTripDetails = (trips, drivers, devices, addresses) => {
         let formattedAddresses = [];
         let speed = 0;
         let distance = 0;
-        let durations = [];
+        let durations = 0;
         
         trip.forEach((stop, stopIndex) => {
             let address = `(${addresses[index][stopIndex].formattedAddress})`;
@@ -130,8 +129,9 @@ const formatTripDetails = (trips, drivers, devices, addresses) => {
             let startDate = new Date(stop.start)
             let stopDate = new Date(stop.stop)
             //time is wrong but work on it later
-            let duration = new Date(((stopDate - startDate) / 1000 / 60) * 1000).toISOString().substr(11, 11)
-            durations.push(duration);
+            durations += (stopDate - startDate)
+            console.log('durations',durations)
+   
         })
 
         speed /= trip.length;
@@ -141,7 +141,7 @@ const formatTripDetails = (trips, drivers, devices, addresses) => {
             deviceName: deviceNamefromId(devices, deviceId),
             speed: speed,
             distance: distance,
-            duration: durations.join(','),
+            duration: getDurationFromTime(durations),
             address: formattedAddresses.join(''),
             driverName: driverNamefromId(drivers, driverId)
         })
@@ -158,6 +158,15 @@ const outputTripDetails = (tripDetails) => {
             `${details.speed} km/h`, `${details.distance} km`, details.duration)
     })
 
+}
+
+const getDurationFromTime = (time) => {
+    let days = Math.floor(time/1000/60/60/24);
+    let hours = Math.floor((time-(days*1000*60*60*24))/1000/60/60);
+    let minutes = Math.floor((time-(hours*1000*60*60)-(days*1000*60*60*24))/1000/60);
+    let seconds = Math.floor((time-(minutes*1000*60)-(hours*1000*60*60)-(days*1000*60*60*24))/1000)
+    return `${days}.${hours}:${minutes}:${seconds}`
+    
 }
 
 const main = (async () => {
